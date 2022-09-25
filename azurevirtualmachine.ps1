@@ -7,6 +7,7 @@ $vsubnetName = ""
 $publicIpName = ""
 $nsgName = ""
 $nicName = ""
+$userAssignedManagedIdentityName = ""
 $userName = ""
 
 Connect-AzAccount
@@ -47,6 +48,12 @@ Write-Host "Get vm system assigned managed identity"
 Get-AzSystemAssignedIdentity -Scope $vm.Id
 $servicePrincipal = Get-AzADServicePrincipal -ObjectId $vm.Identity.PrincipalId
 Get-AzRoleAssignment -ObjectId $servicePrincipal.Id
+
+Write-Host "Assign user managed identity to vm"
+$umi = Get-AzUserAssignedIdentity -ResourceGroupName $resourceGroupName -Name $userAssignedManagedIdentityName
+$vm = Get-AzVM -ResourceGroupName $resourceGroupName -Name $vmName
+Update-AzVM -ResourceGroupName $resourceGroupName -VM $vm -IdentityType UserAssigned -IdentityID $umi.Id
+
 
 Remove-AzVM -ResourceGroupName $resourceGroupName -Name $vmName -Force
 Remove-AzNetworkInterface -ResourceGroupName $resourceGroupName -Name $nicName -Force
