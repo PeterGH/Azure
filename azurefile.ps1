@@ -64,7 +64,7 @@ $headers = @{
 Write-Host "Get storage file service properties"
 Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.windows.net/?restype=service&comp=properties" -Headers $headers
 
-Write-Host "List storage file shares"
+Write-Host "List storage file shares, expect failure due to data plane rbac permission unauthorized"
 Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.windows.net/?comp=list" -Headers $headers
 
 $headers = @{
@@ -115,3 +115,25 @@ Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.window
 
 Write-Host "List directories and files"
 Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/?restype=directory&comp=list" -Headers $headers
+
+Write-Host "Delete file"
+Invoke-WebRequest -Method DELETE -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/file1" -Headers $headers
+
+Write-Host "Delete directory"
+Invoke-WebRequest -Method DELETE -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/dir1?restype=directory" -Headers $headers
+
+
+$headers = @{ 
+"Authorization" = $auth
+"x-ms-version" = $version
+}
+
+Write-Host "Delete file share, expect failure due to data plane rbac permission unauthorized"
+Invoke-WebRequest -Method DELETE -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName`?restype=share" -Headers $headers
+
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+
+Write-Host "Delete storage file share"
+Invoke-WebRequest -Method DELETE -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?api-version=2021-09-01" -ContentType "application/json" -Headers $headers
