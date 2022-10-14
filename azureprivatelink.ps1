@@ -64,5 +64,9 @@ New-AzPrivateDnsZoneGroup @zoneGroupParameter
 
 $group = Get-AzPrivateDnsZoneGroup -ResourceGroupName $resourceGroupName -PrivateEndpointName $privateEndpoint.Name
 
+Get-AzPrivateDnsRecordSet -ResourceGroupName $resourceGroupName -ZoneName $privateDnsZoneName
+
 Remove-AzPrivateEndpointConnection -ResourceId $privateEndpointConnection.Id -Force
 Remove-AzPrivateEndpoint -ResourceGroupName $privateEndpoint.ResourceGroupName -Name $privateEndpoint.Name -Force
+Remove-AzPrivateDnsVirtualNetworkLink -ResourceGroupName $link.ResourceGroupName -ZoneName $link.ZoneName -Name $link.Name
+Remove-AzPrivateDnsZone -ResourceGroupName $resourceGroupName -Name $privateDnsZoneName
