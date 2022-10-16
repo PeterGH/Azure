@@ -3,9 +3,33 @@ $resourceGroupName = ""
 $storageAccountName = ""
 $fileShareName = ""
 $umiClientId = ""
+$vmName = ""
 
 Connect-AzAccount
 Set-AzContext -Subscription $subscriptionId
+
+Write-Host "Enable service endpoint for storage in virtual network"
+$vm = Get-AzVM -ResourceGroupName $resourceGroupName -Name $vmName
+$nic = Get-AzNetworkInterface -ResourceId $vm.NetworkProfile.NetworkInterfaces[0].Id
+$subnet = Get-AzVirtualNetworkSubnetConfig -ResourceId $nic.IpConfigurations[0].Subnet.Id
+$tuples = $subnet.Id.Split("/", [System.StringSplitOptions]::RemoveEmptyEntries)
+$vnet = Get-AzVirtualNetwork -ResourceGroupName $tuples[3] -Name $tuples[7]
+
+Set-AzVirtualNetworkSubnetConfig -VirtualNetwork $vnet -Name $subnet.Name -AddressPrefix $subnet.AddressPrefix[0] -ServiceEndpoint Microsoft.Storage
+$vnet | Set-AzVirtualNetwork
+
+Write-Host "Allow selected virtual network to access storage"
+Update-AzStorageAccountNetworkRuleSet -ResourceGroupName $resourceGroupName -Name $storageAccountName -DefaultAction Deny
+Get-AzStorageAccountNetworkRuleSet -ResourceGroupName $resourceGroupName -Name $storageAccountName
+$vm = Get-AzVM -ResourceGroupName $resourceGroupName -Name $vmName
+$nic = Get-AzNetworkInterface -ResourceId $vm.NetworkProfile.NetworkInterfaces[0].Id
+$subnet = Get-AzVirtualNetworkSubnetConfig -ResourceId $nic.IpConfigurations[0].Subnet.Id
+Add-AzStorageAccountNetworkRule -ResourceGroupName $resourceGroupName -Name $storageAccountName -VirtualNetworkResourceId $subnet.Id
+Get-AzStorageAccountNetworkRuleSet -ResourceGroupName $resourceGroupName -Name $storageAccountName
+
+Write-Host "Remove selected virtual network from accessing storage"
+Remove-AzStorageAccountNetworkRule -ResourceGroupName $resourceGroupName -Name $storageAccountName -VirtualNetworkResourceId $subnet.Id
+Get-AzStorageAccountNetworkRuleSet -ResourceGroupName $resourceGroupName -Name $storageAccountName
 
 Write-Host "Acquire token for ARM access using user assigned managed identity"
 $response = Invoke-WebRequest -Method GET -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&client_id=$umiClientId&resource=https://management.azure.com/" -Headers @{Metadata="true"}
