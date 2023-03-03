@@ -161,3 +161,164 @@ Authorization = "Bearer $armToken"
 
 Write-Host "Delete storage file share"
 Invoke-WebRequest -Method DELETE -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?api-version=2021-09-01" -ContentType "application/json" -Headers $headers
+
+$subscriptionId = ""
+$resourceGroupName = ""
+$storageAccountName = ""
+$fileShareName = ""
+$fileName = ""
+
+Write-Host "Acquire token for ARM access using system assigned managed identity"
+$response = Invoke-WebRequest -Method GET -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/" -Headers @{Metadata="true"}
+$response
+$content = $response.Content | ConvertFrom-Json
+$armToken = $content.access_token
+$armToken
+
+Write-Host "Acquire token for storage access using system assigned managed identity"
+$response = Invoke-WebRequest -Method GET -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://storage.azure.com/" -Headers @{Metadata="true"}
+$response
+$content = $response.Content | ConvertFrom-Json
+$token = $content.access_token
+$token
+
+Write-Host "Create storage file share"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$properties = @{
+enabledProtocols = "SMB"
+accessTier = "Hot"
+}
+$payload = @{
+properties = $properties
+}
+$body = ConvertTo-Json -InputObject $payload
+$response = Invoke-WebRequest -Method PUT -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?api-version=2021-09-01" -ContentType "application/json" -Headers $headers -Body $body
+$response
+
+Write-Host "Create file"
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+"x-ms-type" = "file"
+"x-ms-content-length" = "4096"
+}
+$response = Invoke-WebRequest -Method PUT -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName" -Headers $headers
+$response
+
+Write-Host "Put file range"
+$payload = [System.Text.Encoding]::Unicode.GetBytes("0123456789")
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+"x-ms-range" = "bytes=0-$($payload.Length - 1)"
+"x-ms-write" = "update"
+"Content-Length" = "$($payload.Length)"
+}
+$response = Invoke-WebRequest -Method PUT -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName`?comp=range" -Headers $headers -Body $payload
+$response
+
+Write-Host "Get file"
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+}
+$response = Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName" -Headers $headers
+$response
+
+Write-Host "Get storage file share properties"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$response = Invoke-WebRequest -Method GET -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?`$expand=stats&api-version=2021-09-01" -Headers $headers
+$response
+
+Write-Host "Create storage file share snapshot"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$payload = @{
+}
+$body = ConvertTo-Json -InputObject $payload
+$response = Invoke-WebRequest -Method PUT -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?`$expand=snapshots&api-version=2021-09-01" -ContentType "application/json" -Headers $headers -Body $body
+$response
+
+$r = $response.Content | ConvertFrom-Json
+$snapshotTime = $r.properties.snapshotTime
+
+Write-Host "Get storage file share snapshot properties"
+$headers = @{
+"Authorization" = "Bearer $armToken"
+"x-ms-snapshot" = "$snapshotTime"
+}
+$response = Invoke-WebRequest -Method GET -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?`$expand=stats&api-version=2021-09-01" -Headers $headers
+$response
+
+Write-Host "Acquire a lease to storage file share"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$payload = @{
+"action" = "Acquire"
+"leaseDuration" = "60"
+}
+$body = ConvertTo-Json -InputObject $payload
+$response = Invoke-WebRequest -Method POST -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName/lease?api-version=2021-09-01" -ContentType "application/json" -Headers $headers -Body $body
+$response
+$response.RawContent
+
+$leaseId = ($response.Content | ConvertFrom-Json).leaseId
+$leaseId
+
+Start-Sleep -Seconds 5
+
+Write-Host "Renew a lease to storage file share"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$payload = @{
+"action" = "Renew"
+"leaseId" = $leaseId
+}
+$body = ConvertTo-Json -InputObject $payload
+$response = Invoke-WebRequest -Method POST -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName/lease?api-version=2021-09-01" -ContentType "application/json" -Headers $headers -Body $body
+$response
+$response.RawContent
+
+Write-Host "List storage file shares"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$response = Invoke-WebRequest -Method GET -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares?`$expand=deleted,snapshots&api-version=2021-09-01" -Headers $headers
+$response
+
+Write-Host "Get storage file share unique identifier"
+$headers = @{
+"Authorization" = "Bearer $armToken"
+"x-ms-include-file-share-unique-identifier" = "true"
+}
+$response = Invoke-WebRequest -Method GET -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?`$expand=stats&api-version=2021-09-01" -Headers $headers
+$response.RawContent
+$uniqueId = $response.Headers["x-ms-file-share-unique-identifier"]
+$uniqueId
+
+Write-Host "Delete file"
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+}
+$response = Invoke-WebRequest -Method DELETE -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName" -Headers $headers
+$response
+
+Write-Host "Delete storage file share"
+$headers = @{
+Authorization = "Bearer $armToken"
+}
+$response = Invoke-WebRequest -Method DELETE -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default/shares/$fileShareName`?api-version=2021-09-01" -ContentType "application/json" -Headers $headers
+$response
+
