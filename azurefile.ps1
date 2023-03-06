@@ -111,6 +111,58 @@ $headers = @{
 $response = Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName" -Headers $headers
 $response
 
+Write-Host "Get file properties"
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+}
+$response = Invoke-WebRequest -Method HEAD -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName" -Headers $headers
+$response
+
+#$now = (Get-Date -AsUTC -UFormat "%a, %d %b %Y %T GMT")
+#$now = (Get-Date -UFormat "%a, %d %b %Y %T GMT")
+Write-Host "Set file properties"
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+"x-ms-file-creation-time" = "preserve"
+"x-ms-file-last-write-time" = "preserve"
+"x-ms-file-change-time" = "now"
+}
+$response = Invoke-WebRequest -Method PUT -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName`?comp=properties" -Headers $headers
+$response
+
+Write-Host "List file ranges"
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+}
+$response = Invoke-WebRequest -Method GET -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName`?comp=rangelist" -Headers $headers
+$response
+
+
+Write-Host "Put file range from url"
+$sourceUrl = ""
+$headers = @{
+"Authorization" = "Bearer $token"
+"x-ms-version" = "2021-10-04"
+"x-ms-file-request-intent" = "backup"
+"x-ms-copy-source" = "$sourceUrl"
+"x-ms-copy-source-authorization" = "Bearer $token"
+"x-ms-write" = "update"
+"x-ms-range" = "bytes=0-511"
+"x-ms-source-range" = "bytes=0-511"
+"Content-Length" = "512"
+"x-ms-file-last-write-time" = "now"
+}
+$response = Invoke-WebRequest -Method PUT -Uri "https://$storageAccountName.file.core.windows.net/$fileShareName/$fileName`?comp=range" -Headers $headers
+$response
+
+
+
 Write-Host "Get storage file share properties"
 $headers = @{
 Authorization = "Bearer $armToken"
@@ -278,4 +330,3 @@ $payload = @{
 $body = ConvertTo-Json -InputObject $payload -Depth 4
 $response = Invoke-WebRequest -Method PUT -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$storageAccountName/fileServices/default?api-version=2021-09-01" -ContentType "application/json" -Headers $headers -Body $body
 $response
-
