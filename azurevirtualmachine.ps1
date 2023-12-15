@@ -9,6 +9,7 @@ $nsgName = ""
 $nicName = ""
 $userAssignedManagedIdentityName = ""
 $userName = ""
+$password = ""
 
 Connect-AzAccount
 Set-AzContext -Subscription $subscriptionId
@@ -24,16 +25,18 @@ $allowRdpRule = New-AzNetworkSecurityRuleConfig -Name "allowRDP" -Protocol Tcp -
 New-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Location $location -Name $nsgName -SecurityRules $allowRdpRule
 $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Name $nsgName
 
-New-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName -AllocationMethod Dynamic -Location $location
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName -AllocationMethod Static -Location $location
 $ip = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName
 
 New-AzNetworkInterface -ResourceGroupName $resourceGroupName -Name $nicName -Location $location -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $ip.Id -NetworkSecurityGroupId $nsg.Id
 $nic = Get-AzNetworkInterface -ResourceGroupName $resourceGroupName -Name $nicName
 
-$cred = Get-Credential -UserName $userName -Message "Create a user and password"
+# $cred = Get-Credential -UserName $userName -Message "Create a user and password"
+$securePassword = $password | ConvertTo-SecureString -AsPlainText -Force
+$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $userName,$securePassword
 $vmConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize
 Set-AzVMOperatingSystem -VM $vmConfig -Windows -ComputerName $vmName -Credential $cred
-Set-AzVMSourceImage -VM $vmConfig -PublisherName "MicrosoftWindowsDesktop" -Offer "windows-11" -Skus "win11-21h2-ent" -Version "latest"
+Set-AzVMSourceImage -VM $vmConfig -PublisherName "MicrosoftWindowsDesktop" -Offer "windows-11" -Skus "win11-23h2-ent" -Version "latest"
 Add-AzVMNetworkInterface -VM $vmConfig -Id $nic.Id
 New-AzVM -ResourceGroupName $resourceGroupName -Location $location -VM $vmConfig
 $vm = Get-AzVM -ResourceGroupName $resourceGroupName -Name $vmName
@@ -64,4 +67,5 @@ Remove-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpNa
 Get-AzVMImagePublisher -Location $location | Where-Object { $_.PublisherName -match "MicrosoftWindowsDesktop" }
 Get-AzVMImageOffer -Location $location -PublisherName "MicrosoftWindowsServer" | Where-Object { $_.Offer -match "windows-11" }
 Get-AzVMImageSku -Location $location -PublisherName "MicrosoftWindowsDesktop" -Offer "windows-11"
-$imageName = "MicrosoftWindowsDesktop:windows-11:win11-21h2-ent:latest"
+$imageName = "MicrosoftWindowsDesktop:windows-11:win11-23h2-ent:latest"
+Get-AzComputeResourceSku -Location $location | Where-Object {$_.ResourceType -ieq "virtualmachines"}
